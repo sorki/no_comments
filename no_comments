@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+
+import re
+import sys
+from optparse import OptionParser
+
+DESC='''
+Comment stripping utility.
+Handles both inline comments and block comments.
+
+Strips C/C++ comments by default (both inline and block).
+
+NOTE: This utility is DUMB - as it's not language specific it
+doesn't understand the syntax
+(It will remove comments in strings, ignore nested comments or so).
+'''.strip()
+
+USAGE='Usage: cat source_code_file | %prog [options]'
+
+def main():
+    parser = OptionParser(usage=USAGE, description=DESC)
+    parser.add_option('-1', '--inline_only', action='store_true',
+        help='Strip only inline comments')
+    parser.add_option('-b', '--block_only', action='store_true',
+        help='Strip only block comments (e.g. /*  */)')
+    parser.add_option('--1_delim', action='store',
+        default='//', dest='i_delim',
+        help='Inline comments delimiter', metavar="DELIM")
+    parser.add_option('--b_start', action='store', default='/*',
+        help='Block comment start delimiter', metavar="DELIM")
+    parser.add_option('--b_end', action='store', default='*/',
+        help='Block comment end delimiter', metavar="DELIM")
+    parser.add_option('--start_only', action='store_true',
+        help='Strip only comments at the beggining of the line')
+    parser.add_option('--preserve_empty', action='store_true',
+        help='Preserve empty lines')
+
+
+    (opts, args) = parser.parse_args()
+
+    if opts.inline_only and opts.block_only:
+        print >> sys.stderr, 'Inline only and block only options '\
+            'are mutually exclusive'
+        sys.exit(1)
+
+    in_re = re.compile('%s%s.*?\n' % (
+        opts.start_only and '^()' or '(.*?)',
+        re.escape(opts.i_delim)), re.MULTILINE)
+
+    line_blocks_re = re.compile('%s%s(.*?)%s' % (
+        opts.start_only and '^()' or '(.*?)',
+        re.escape(opts.b_start),
+        re.escape(opts.b_end)), re.MULTILINE)
+
+    block_re = re.compile('%s%s(.*?)%s' % (
+        opts.start_only and '^' or '',
+        re.escape(opts.b_start),
+        re.escape(opts.b_end)), re.DOTALL | re.MULTILINE)
+
+
+    def fn_in(match):
+        pre = match.group(1).strip()
+        if len(pre) == 0:
+            if opts.preserve_empty:
+                return '\n'
+            else:
+                return ''
+        else:
+            return pre + '\n'
+
+    def fn_in_b(match):
+        pre = match.group(1).rstrip()
+        return pre
+
+    def fn_b(match):
+        nls = 0
+        if opts.preserve_empty:
+            nls = match.group(0).count('\n')
+            return ('\n' * nls)
+
+        return ''
+
+    inp = sys.stdin.read()
+    inlines_removed = inp
+    if not opts.block_only:
+        inlines_removed = in_re.sub(fn_in, inp)
+    inline_blocks = inlines_removed
+    if not opts.inline_only:
+        inline_blocks = line_blocks_re.sub(fn_in_b, inlines_removed)
+    blocks_removed = inline_blocks
+    if not opts.inline_only:
+        blocks_removed = block_re.sub(fn_b, inline_blocks)
+
+    print blocks_removed,
+    return
+
+if __name__ == "__main__":
+    main()

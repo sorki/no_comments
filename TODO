@@ -1,0 +1,3 @@
+- move the processing out of the entry point (to be able to call it as a function)
+- add tests
+- pypi package
